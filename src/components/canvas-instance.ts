@@ -5,7 +5,7 @@ import { convertToPercentage } from '../helpers/convert-to-percentage';
 
 const $ = require('jquery');
 import { Annotation, AnnotationBody, Canvas, Duration, Range, Utils } from 'manifesto.js';
-import { Behavior, MediaType } from '@iiif/vocabulary/dist-commonjs';
+import { Behavior, MediaType, RenderingFormat } from '@iiif/vocabulary/dist-commonjs';
 import { BaseComponent, IBaseComponentOptions } from '@iiif/base-component';
 import { IAVCanvasInstanceData } from '../interfaces/canvas-instance-data';
 import { MediaElement } from '../elements/media-element';
@@ -34,6 +34,13 @@ import { Logger } from '../helpers/logger';
 import { getHls } from '../helpers/get-hls';
 import 'waveform-panel';
 import { WaveformPanel } from 'waveform-panel';
+
+type AugmentedRenderingFormat = RenderingFormat | "text/vtt";
+type TextTrackDescriptor = {
+  language?: string;
+  label?: string;
+  id: string;
+};
 
 export class CanvasInstance extends BaseComponent {
   private _$canvasContainer: JQuery;
@@ -589,6 +596,16 @@ export class CanvasInstance extends BaseComponent {
       const offsetStart = ot[0] ? parseInt(ot[0]) : ot[0],
         offsetEnd = ot[1] ? parseInt(ot[1]) : ot[1];
 
+      const captions: Array<TextTrackDescriptor> = item
+        .getRenderings()
+        .filter(r => r.getFormat() as AugmentedRenderingFormat === "text/vtt")
+        .map(vttRendering => ({
+          label:
+            vttRendering.getLabel().getValue() ??
+            vttRendering.getFormat().toString(),
+          id: vttRendering.id,
+        }));
+
       // todo: type this
       const itemData: any = {
         active: false,
@@ -603,6 +620,7 @@ export class CanvasInstance extends BaseComponent {
         top: percentageTop,
         type: type,
         width: percentageWidth,
+        captions: captions
       };
 
       this._renderMediaElement(itemData);
@@ -1334,7 +1352,16 @@ export class CanvasInstance extends BaseComponent {
         //});
       }
     } else {
-      $mediaElement.attr('src', data.source);
+      $mediaElement.append(
+        $(`<source src="${data.source}" type="${data.format}">`)
+      );
+      if (data.captions && data.captions.length) {
+        data.captions.forEach(subtitle => {
+          $mediaElement.append(
+            $(`<track label="${subtitle.label}" kind="subtitles" srclang="${subtitle.language}" src="${subtitle.id}" ${data.captions.indexOf(subtitle) === 0 ? "default" : ""}>`)
+          );
+        })
+      }
     }
 
     $mediaElement
